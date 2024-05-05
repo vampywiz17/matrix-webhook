@@ -23,7 +23,7 @@ This microservice supports session verification (using element client)
 - Create a new Matrix account on your homeserver for receiving webhooks
 - Add this account to a new E2EE room with yourself then login with the new account and accept the invite
 - Clone this repo, create a copy of the provided `.env.example` file as `.env`, and fill in all the required info
-- Run `sudo chmod +x build-run.sh` to give execution permissions (if on linux) and run `build-run.sh` script. This will build the image and spin the container
+- Run `sudo chmod +x build-run.sh` and `sudo chmod +x docker-entrypoint.sh` to give execution permissions (if on linux) and then run `build-run.sh` script. This will build the image and spin the container
 - Start up the gateway. It logs in, sends a greeting message, and listens to webhook events
 - This session can be verified - webhook will be part of trusted devices
 - Send data with `curl` or any HTTP POST capable client to the gateway
