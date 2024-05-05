@@ -1,0 +1,13 @@
+version: "3"
+
+services:
+  matrix-e2ee-webhook:
+    image: matrix-webhook-image
+    container_name: matrix-webhook
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./store:/config
