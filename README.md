@@ -2,7 +2,7 @@
 
 A microservice that forwards form data or JSON objects received in an HTTP POST request to an end-to-end-encrypted (E2EE) Matrix room. There is no schema restriction on the posted data, so you can throw at it _anyting_! Supports multiple rooms and sender aliases with different associated webhook URLs, e.g, one for Grafana, another for `curl`, and so on. Can convert the received payload to JSON or YAML for better message readability, and can apply Markdown formatting to messages. Easy installation with `docker-compose`.
 
-This microservice also allows you to verify a session (using element client)
+This microservice supports session verification (using element client)
 
 ## Table of contents <!-- omit in toc -->
 
@@ -22,6 +22,7 @@ This microservice also allows you to verify a session (using element client)
 
 - Create a new Matrix account on your homeserver for receiving webhooks
 - Add this account to a new E2EE room with yourself then login with the new account and accept the invite
+- This session can be verified - webhook will be part of trusted devices
 - Clone this repo, create a copy of the provided `.env.example` file as `.env`, and fill in all the required info
 - Start up the gateway. It logs in, sends a greeting message, and listens to webhook events
 - Send data with `curl` or any HTTP POST capable client to the gateway
