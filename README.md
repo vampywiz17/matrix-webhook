@@ -90,41 +90,14 @@ The gateway tries to join all of the specified rooms in the `.env` file on start
 
 - The Python log level via `PYTHON_LOG_LEVEL`: `debug` | `info` (default) | `warn` | `error` | `critical`
 - The store path of the saved login session via `LOGIN_STORE_PATH`: a path-string without trailing slash like `/config` (default)
-  - If you want to make login sessions persist to avoid device IDs stacking up on the webhook user, you can put this path on a docker volume with read-write permissions to the `1000:1000` user:group.
+- If you want to make login sessions persist to avoid device IDs stacking up on the webhook user, you can put this path on a docker volume with read-write permissions to the `1000:1000` user:group.
 
 ## Dependencies
 
 - [Docker](https://www.docker.com/)
 - [Docker Compose](https://github.com/docker/compose)
 
-Installation on Manjaro Linux:
-
-```bash
-sudo pacman -S docker docker-compose
-
-sudo systemctl enable --now docker
-```
-
 Of course, you'll also need a [Matrix server](https://matrix.org/discover/) up and running with at least one E2EE room and two users joined in the same room (the webhook user and probably _you_). Explaining setting these up is way beyond the scope of this document, so please see the online docs for proper instructions, or use a hosted Matrix server.
-
-## Development
-
-Install global dependencies, install dev dependencies, create a new virtual environment, install package dependencies, then start the project:
-
-```bash
-# Manjaro
-sudo pacman -S libolm
-sudo pip install virtualenv
-
-virtualenv venv
-
-# Fish
-source venv/bin/activate.fish
-
-pip install -r requirements.txt
-
-./docker-entrypoint.sh
-```
 
 ## Troubleshooting
 
