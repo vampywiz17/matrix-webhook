@@ -41,7 +41,11 @@ class WebhookServer:
             return yaml.dump(data, indent=2, allow_unicode=allow_unicode)
 
     async def _get_index(self, request: web.Request) -> web.Response:
-        return web.json_response({'success': True})
+        return web.json_response({'success': True},headers={
+        'Access-Control-Allow-Origin': '*', 
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 
+        'Access-Control-Allow-Headers': 'Content-Type', 
+    })
 
     async def _post_hook(self, request: web.Request) -> web.Response:
         message_format = os.environ['MESSAGE_FORMAT']
@@ -58,12 +62,20 @@ class WebhookServer:
         if token not in self.KNOWN_TOKENS.keys():
             logging.error(
                 f"Login token '{token}' is not recognized as known token.")
-            return web.json_response({'error': 'Token mismatch'}, status=404)
+            return web.json_response({'error': 'Token mismatch'}, status=404,headers={
+        'Access-Control-Allow-Origin': '*', 
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 
+        'Access-Control-Allow-Headers': 'Content-Type', 
+    })
 
         if message_format not in ['raw', 'json', 'yaml']:
             logging.error(
                 f"Message format '{message_format}' is not allowed, please check the config.")
-            return web.json_response({'error': 'Gateway configured with unknown message format'}, status=415)
+            return web.json_response({'error': 'Gateway configured with unknown message format'}, status=415,headers={
+        'Access-Control-Allow-Origin': '*', 
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 
+        'Access-Control-Allow-Headers': 'Content-Type', 
+    })
 
         if message_format != 'raw':
             data = dict(await request.post())
@@ -84,7 +96,11 @@ class WebhookServer:
             self.KNOWN_TOKENS[token]['app_name']
         )
 
-        return web.json_response({'success': True})
+        return web.json_response({'success': True},headers={
+        'Access-Control-Allow-Origin': '*', 
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 
+        'Access-Control-Allow-Headers': 'Content-Type', 
+    })
 
     async def run(self, matrix_client: E2EEClient) -> None:
         self.matrix_client = matrix_client
