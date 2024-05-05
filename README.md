@@ -120,5 +120,5 @@ Of course, you'll also need a [Matrix server](https://matrix.org/discover/) up a
 
 ## Contact
 
-Gabriel Teodor   
+Gabriel Teodor Popescu
 [email](teodor17gabi61@gmail.com) | [Linkedin](https://https://www.linkedin.com/in/popescu-tg)
