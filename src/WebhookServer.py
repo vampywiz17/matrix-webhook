@@ -18,11 +18,33 @@ class WebhookServer:
 
     def _parse_known_tokens(self, rooms: str) -> dict:
         known_tokens = {}
-        for pairs in rooms.split(' '):
-            token, room, app_name = pairs.split(',')
-            known_tokens[token] = {'room': room, 'app_name': app_name}
-        return known_tokens
 
+        if not rooms:
+            logging.critical("KNOWN_TOKENS is empty or not set.")
+            return known_tokens
+
+        # engedjük a szóközös ÉS sortöréses elválasztást is
+        for raw in rooms.replace('\n', ' ').split(' '):
+            pairs = raw.strip()
+            if not pairs:
+                continue  # üres elem
+
+            parts = [p.strip() for p in pairs.split(',', maxsplit=2)]
+            if len(parts) != 3:
+                logging.error(f"Malformed KNOWN_TOKENS entry: '{pairs}'. Expected 'token,room,app_name'. Skipping.")
+                continue
+
+            token, room, app_name = parts
+            if not token or not room or not app_name:
+                logging.error(f"Incomplete KNOWN_TOKENS entry: '{pairs}'. Skipping.")
+                continue
+
+            known_tokens[token] = {'room': room, 'app_name': app_name}
+
+        if not known_tokens:
+            logging.critical("No valid KNOWN_TOKENS parsed. Please check the add-on configuration.")
+        return known_tokens
+        
     def get_known_rooms(self) -> set:
         known_rooms = set()
         known_rooms.add(os.environ['MATRIX_ADMIN_ROOM'])
