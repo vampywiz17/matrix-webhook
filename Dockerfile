@@ -15,6 +15,7 @@ ENV PYTHONUNBUFFERED=1
 ENV LOGIN_STORE_PATH=/config
 
 COPY docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
 ENTRYPOINT [ "./docker-entrypoint.sh" ]
 
 COPY src/ ./src/
