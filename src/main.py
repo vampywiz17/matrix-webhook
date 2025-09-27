@@ -21,6 +21,7 @@ async def main() -> None:
 
     await asyncio.gather(*processes, return_exceptions=True)
 
+    await asyncio.Event().wait()
 
 try:
     asyncio.get_event_loop().run_until_complete(main())
