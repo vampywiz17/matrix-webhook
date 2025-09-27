@@ -114,16 +114,56 @@ class WebhookServer:
             logging.error(f"Message format '{message_format}' not allowed.")
             return web.json_response({'error': 'Gateway configured with unknown message format'}, status=415)
 
+        extracted_from_messages = None
+        original_json = None
+
         if message_format != 'raw':
             data = dict(await request.post())
             try:
-                data = await request.json()
+                original_json = await request.json()
+                data = original_json
             except:
                 logging.error('Error decoding data as JSON.')
             finally:
                 logging.debug(f"Decoded data: {data}")
+            if message_format == 'json' and isinstance(original_json, dict) and 'message' in original_json:
+                try:
+                    messages_val = original_json.get('message')
+                    if isinstance(messages_val, str):
+                        extracted_from_messages = messages_val
+                    elif isinstance(messages_val, (list, tuple)):
+                        # megpróbáljuk a tipikus {"content": "..."} elemeket összefűzni
+                        parts = []
+                        for item in messages_val:
+                            if isinstance(item, dict):
+                                c = item.get('content')
+                                if isinstance(c, str):
+                                    parts.append(c)
+                                elif isinstance(c, list):
+                                    # ha a content lista, akkor a benne lévő dict-ek "text" mezőit gyűjtjük
+                                    for seg in c:
+                                        if isinstance(seg, dict) and isinstance(seg.get('text'), str):
+                                            parts.append(seg['text'])
+                        if parts:
+                            extracted_from_messages = "\n".join(p for p in parts if p).strip()
+                        else:
+                            # ha nincs felismerhető "content", akkor a teljes messages listát küldjük JSON-ként
+                            extracted_from_messages = messages_val
+                    else:
+                        # egyéb típus: JSON-ként továbbítjuk
+                        extracted_from_messages = messages_val
+                except Exception as e:
+                    logging.error(f'Failed to extract "messages" value: {e}')
             data = self._format_message(message_format, allow_unicode, data)
-
+            if extracted_from_messages is not None:
+                if isinstance(extracted_from_messages, str):
+                    data = extracted_from_messages
+                else:
+                    # nem string esetén JSON-ként küldjük csak a value-t
+                    try:
+                        data = json.dumps(extracted_from_messages, ensure_ascii=(not allow_unicode), indent=2)
+                    except Exception:
+                        data = str(extracted_from_messages)
         logging.debug(f"{message_format.upper()} formatted data: {data}")
         await self.matrix_client.send_message(
             data,
