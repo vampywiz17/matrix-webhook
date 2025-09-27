@@ -43,10 +43,10 @@ class E2EEClient:
         with open(self.CONFIG_FILE, "w") as f:
             json.dump(
                 {
-                    'homeserver': homeserver,  # e.g. "https://matrix.example.org"
-                    'user_id': resp.user_id,  # e.g. "@user:example.org"
-                    'device_id': resp.device_id,  # device ID, 10 uppercase letters
-                    'access_token': resp.access_token  # cryptogr. access token
+                    'homeserver': homeserver,
+                    'user_id': resp.user_id,
+                    'device_id': resp.device_id,
+                    'access_token': resp.access_token
                 },
                 f
             )
@@ -125,7 +125,7 @@ class E2EEClient:
 
             if isinstance(event, UnknownToDeviceEvent):
                 if event.source['type'] == 'm.key.verification.request':
-                    print('Received verification request, sending response....')
+                    print('Received verification request, sending response.')
                     content = {
                         "transaction_id": event.source['content']['transaction_id'],
                         "from_device": client.device_id,
@@ -164,68 +164,33 @@ class E2EEClient:
                 if isinstance(resp, ToDeviceError):
                     print(f"accept_key_verification failed with {resp}")
 
-                sas = client.key_verifications[event.transaction_id]
-
-                todevice_msg = sas.share_key()
-                resp = await client.to_device(todevice_msg)
-                if isinstance(resp, ToDeviceError):
-                    print(f"to_device failed with {resp}")
-
-            elif isinstance(event, KeyVerificationCancel):  # anytime
-                # There is no need to issue a
-                # client.cancel_key_verification(tx_id, reject=False)
-                # here. The SAS flow is already cancelled.
-                # We only need to inform the user.
+            elif isinstance(event, KeyVerificationCancel):
                 print(
                     f"Verification has been cancelled by {event.sender} "
                     f'for reason "{event.reason}".'
                 )
 
-            elif isinstance(event, KeyVerificationKey):  # second step
-                
+            elif isinstance(event, KeyVerificationKey):
                 sas = client.key_verifications[event.transaction_id]
-
                 print(f"{sas.get_emoji()}")
-
                 resp = await client.confirm_short_auth_string(event.transaction_id)
                 if isinstance(resp, ToDeviceError):
                     print(f"confirm_short_auth_string failed with {resp}")
 
-            elif isinstance(event, KeyVerificationMac):  # third step
-                
+            elif isinstance(event, KeyVerificationMac):
                 sas = client.key_verifications[event.transaction_id]
                 try:
                     todevice_msg = sas.get_mac()
                 except LocalProtocolError as e:
-                    # e.g. it might have been cancelled by ourselves
-                    print(
-                        f"Cancelled or protocol error: Reason: {e}.\n"
-                        f"Verification with {event.sender} not concluded. "
-                        "Try again?"
-                    )
+                    print(f"Cancelled or protocol error: {e}")
                 else:
                     resp = await client.to_device(todevice_msg)
                     if isinstance(resp, ToDeviceError):
                         print(f"to_device failed with {resp}")
-                    print(
-                        f"sas.we_started_it = {sas.we_started_it}\n"
-                        f"sas.sas_accepted = {sas.sas_accepted}\n"
-                        f"sas.canceled = {sas.canceled}\n"
-                        f"sas.timed_out = {sas.timed_out}\n"
-                        f"sas.verified = {sas.verified}\n"
-                        f"sas.verified_devices = {sas.verified_devices}\n"
-                    )
-                    print(
-                        "Emoji verification was successful!\n"
-                        "Hit Control-C to stop the program or "
-                        "initiate another Emoji verification from "
-                        "another device or room."
-                    )
+                    print("Emoji verification was successful!")
+
             else:
-                print(
-                    f"Received unexpected event type {type(event)}. "
-                    f"Event is {event}. Event will be ignored."
-                )
+                print(f"Received unexpected event type {type(event)}. Event is {event}. Ignored.")
         except BaseException:
             print(traceback.format_exc())
 
@@ -234,7 +199,6 @@ class E2EEClient:
 
         if not self.greeting_sent:
             self.greeting_sent = True
-
             greeting = f"Hi, I'm up and runnig from **{os.environ['MATRIX_DEVICE']}**, waiting for webhooks!"
             await self.send_message(greeting, os.environ['MATRIX_ADMIN_ROOM'], 'Webhook server')
 
@@ -257,10 +221,7 @@ class E2EEClient:
             'body': f"{msg_prefix}{message}",
         }
         if os.environ['USE_MARKDOWN'] == 'True':
-            # Markdown formatting removes YAML newlines if not padded with spaces,
-            # and can also mess up posted data like system logs
             logging.debug('Markdown formatting is turned on.')
-
             content['format'] = 'org.matrix.custom.html'
             content['formatted_body'] = markdown(
                 f"{msg_prefix}{message}", extensions=['extra'])
@@ -272,9 +233,124 @@ class E2EEClient:
             ignore_unverified_devices=True
         )
 
+    # 🔹 ÚJ: kép küldése titkosított/nem titkosított szobába
+    async def send_image(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        mimetype: str,
+        room: str,
+        sender: str,
+        caption: Optional[str] = None,
+        sync: Optional[bool] = False
+    ) -> None:
+        from nio.responses import UploadError
+        try:
+            if sync:
+                await self.client.sync(timeout=3000, full_state=True)
+
+            msg_prefix = ""
+            if os.environ.get('DISPLAY_APP_NAME') == 'True':
+                msg_prefix = f"**{sender}** says:  \n"
+
+            room_obj = self.client.rooms.get(room)
+            is_encrypted = getattr(room_obj, "encrypted", True)
+            size = len(file_bytes)
+
+            if is_encrypted:
+                try:
+                    from nio.crypto.attachment import encrypt_attachment  # modern path
+                except Exception:
+                    try:
+                        from nio.crypto import attachment as _attachment
+                        encrypt_attachment = _attachment.encrypt_attachment  # type: ignore
+                    except Exception:
+                        try:
+                            from nio.crypto import attachments as _attachment_legacy  # type: ignore
+                            encrypt_attachment = _attachment_legacy.encrypt_attachment  # type: ignore
+                        except Exception as _e:
+                            logging.error(
+                                "Matrix E2EE attachment encryption nem elérhető a környezetben. "
+                                "Ellenőrizd a matrix-nio[e2e] telepítést és a verziót. "
+                                f"Import hiba: {_e}"
+                            )
+                            raise
+                encrypted_bytes, enc_info = encrypt_attachment(file_bytes)
+                from io import BytesIO
+
+                upload_resp = await self.client.upload(
+                    BytesIO(encrypted_bytes),
+                    content_type="application/octet-stream",
+                    filename=filename,
+                    filesize=len(encrypted_bytes),
+                )
+
+                # --- normalize upload response ---
+                if isinstance(upload_resp, tuple):
+                    upload_resp = upload_resp[0]
+
+                if isinstance(upload_resp, UploadError):
+                    logging.error(f"Image upload failed: {upload_resp}")
+                    return
+
+                mxc = upload_resp.content_uri
+
+                mxc = upload_resp.content_uri
+                content = {
+                    "msgtype": "m.image",
+                    "body": filename if not caption else caption,
+                    "info": {"mimetype": mimetype, "size": size},
+                    "file": {
+                        "url": mxc,
+                        "iv": enc_info["iv"],
+                        "hashes": enc_info["hashes"],
+                        "key": enc_info["key"],
+                        "v": "v2",
+                    },
+                }
+            else:
+
+                from io import BytesIO
+                upload_resp = await self.client.upload(
+                    BytesIO(file_bytes),
+                    content_type=mimetype,
+                    filename=filename,
+                    filesize=len(file_bytes),
+                )
+
+                # --- normalize upload response ---
+                if isinstance(upload_resp, tuple):
+                    upload_resp = upload_resp[0]
+
+                if isinstance(upload_resp, UploadError):
+                    logging.error(f"Image upload failed: {upload_resp}")
+                    return
+                content = {
+                    "msgtype": "m.image",
+                    "body": filename if not caption else caption,
+                    "info": {"mimetype": mimetype, "size": size},
+                    "url": upload_resp.content_uri,
+                }
+
+            if os.environ.get('USE_MARKDOWN') == 'True' and (caption or msg_prefix):
+                body_text = f"{msg_prefix}{caption or filename}"
+                content["format"] = "org.matrix.custom.html"
+                try:
+                    content["formatted_body"] = markdown(body_text, extensions=['extra'])
+                except Exception:
+                    content.pop("format", None)
+
+            await self.client.room_send(
+                room_id=room,
+                message_type="m.room.message",
+                content=content,
+                ignore_unverified_devices=True
+            )
+        except Exception as e:
+            logging.error(f"Failed to send image: {e}")
+
     async def run(self) -> None:
         await self.login()
-
         self.client.add_event_callback(self._message_callback, RoomMessageText)
         self.client.add_response_callback(self._sync_callback, SyncResponse)
         self.client.add_to_device_callback(self.to_device_callback, None)
@@ -287,5 +363,4 @@ class E2EEClient:
         await self.client.joined_rooms()
 
         logging.info('The Matrix client is waiting for events.')
-
         await self.client.sync_forever(timeout=300000, full_state=True)
