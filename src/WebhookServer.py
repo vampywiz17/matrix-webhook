@@ -181,7 +181,7 @@ class WebhookServer:
         self.matrix_client = matrix_client
         app = web.Application()
         app.router.add_get('/', self._get_index)
-        app.router.add_post('/post/{token:[a-zA-Z0-9_]+}', self._post_hook)
+        app.router.add_post('/post/{token:[a-zA-Z0-9]+}', self._post_hook)
 
         runner = web.AppRunner(app)
         await runner.setup()
