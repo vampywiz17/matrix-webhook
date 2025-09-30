@@ -1,21 +1,38 @@
-FROM python:3.9-slim
+FROM python:3.9-slim AS builder
 
 WORKDIR /app
+ARG TARGETARCH
+
+RUN apt-get update \
+ && if [ "$TARGETARCH" = "arm" ]; then \
+      apt-get install -y --no-install-recommends \
+        build-essential libffi-dev libssl-dev python3-dev gcc; \
+    fi \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
 COPY requirements.txt ./
 
-RUN apt-get update && apt-get install -y cmake
+RUN pip wheel --prefer-binary --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
-RUN set -x \
-    && pip install --no-cache-dir -r requirements.txt
+
+FROM python:3.9-slim AS runtime
+
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    LOGIN_STORE_PATH=/config
+
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir --no-compile /wheels/*
+
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+COPY src/ ./src/
+RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 8000
-
-ENV PYTHONUNBUFFERED=1
-ENV LOGIN_STORE_PATH=/config
-
-COPY docker-entrypoint.sh ./
-RUN chmod +x ./docker-entrypoint.sh
-ENTRYPOINT [ "./docker-entrypoint.sh" ]
-
-COPY src/ ./src/
+ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -68,6 +68,7 @@ class WebhookServer:
     async def _post_hook(self, request: web.Request) -> web.Response:
         message_format = os.environ['MESSAGE_FORMAT']
         allow_unicode = os.environ['ALLOW_UNICODE'] == 'True'
+        compatibility = os.environ.get('COMPATIBILITY', 'False') == 'True'
 
         token = request.match_info.get('token', '')
         logging.debug(f"Login token: {token}")
@@ -126,7 +127,7 @@ class WebhookServer:
                 logging.error('Error decoding data as JSON.')
             finally:
                 logging.debug(f"Decoded data: {data}")
-            if message_format == 'json' and isinstance(original_json, dict) and 'message' in original_json:
+            if compatibility and message_format == 'json' and isinstance(original_json, dict) and 'message' in original_json:
                 try:
                     messages_val = original_json.get('message')
                     if isinstance(messages_val, str):

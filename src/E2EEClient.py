@@ -244,6 +244,8 @@ class E2EEClient:
         caption: Optional[str] = None,
         sync: Optional[bool] = False
     ) -> None:
+        import mimetypes
+        from io import BytesIO
         from nio.responses import UploadError
         try:
             if sync:
@@ -256,6 +258,23 @@ class E2EEClient:
             room_obj = self.client.rooms.get(room)
             is_encrypted = getattr(room_obj, "encrypted", True)
             size = len(file_bytes)
+
+            if not mimetype:
+                guessed, _ = mimetypes.guess_type(filename)
+                mimetype = guessed or "application/octet-stream"
+
+            body_name = os.path.basename(filename) if filename else "image"
+
+            # 3) opcionálisan képméret (Element Web szereti, de nem kötelező)
+            info = {"mimetype": mimetype, "size": size}
+            try:
+                from PIL import Image  # type: ignore
+                with Image.open(BytesIO(file_bytes)) as im:
+                    w, h = im.size
+                    info["w"] = int(w)
+                    info["h"] = int(h)
+            except Exception:
+                pass
 
             if is_encrypted:
                 try:
@@ -276,7 +295,6 @@ class E2EEClient:
                             )
                             raise
                 encrypted_bytes, enc_info = encrypt_attachment(file_bytes)
-                from io import BytesIO
 
                 upload_resp = await self.client.upload(
                     BytesIO(encrypted_bytes),
@@ -296,10 +314,11 @@ class E2EEClient:
                 mxc = upload_resp.content_uri
 
                 mxc = upload_resp.content_uri
+               
                 content = {
                     "msgtype": "m.image",
-                    "body": filename if not caption else caption,
-                    "info": {"mimetype": mimetype, "size": size},
+                    "body": body_name,
+                    "info": info,
                     "file": {
                         "url": mxc,
                         "iv": enc_info["iv"],
@@ -309,8 +328,6 @@ class E2EEClient:
                     },
                 }
             else:
-
-                from io import BytesIO
                 upload_resp = await self.client.upload(
                     BytesIO(file_bytes),
                     content_type=mimetype,
@@ -327,13 +344,13 @@ class E2EEClient:
                     return
                 content = {
                     "msgtype": "m.image",
-                    "body": filename if not caption else caption,
-                    "info": {"mimetype": mimetype, "size": size},
+                    "body": body_name,
+                    "info": info,
                     "url": upload_resp.content_uri,
                 }
 
             if os.environ.get('USE_MARKDOWN') == 'True' and (caption or msg_prefix):
-                body_text = f"{msg_prefix}{caption or filename}"
+                body_text = f"{msg_prefix}{caption or body_name}"
                 content["format"] = "org.matrix.custom.html"
                 try:
                     content["formatted_body"] = markdown(body_text, extensions=['extra'])
