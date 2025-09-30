@@ -6,7 +6,8 @@ ARG TARGETARCH
 RUN apt-get update \
  && if [ "$TARGETARCH" = "arm" ]; then \
       apt-get install -y --no-install-recommends \
-        build-essential libffi-dev libssl-dev python3-dev gcc; \
+        build-essential libffi-dev libssl-dev python3-dev gcc \
+        libjpeg-dev zlib1g-dev; \
     fi \
  && rm -rf /var/lib/apt/lists/*
 

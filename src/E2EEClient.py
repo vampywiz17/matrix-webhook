@@ -91,7 +91,7 @@ class E2EEClient:
                 device_id=config['device_id'],
                 store_path=self.STORE_PATH,
                 config=self.client_config,
-                ssl=bool(os.environ['MATRIX_SSLVERIFY']),
+                ssl=(os.environ.get('MATRIX_SSLVERIFY', 'True') == 'True'),
             )
 
             self.client.restore_login(
@@ -256,7 +256,7 @@ class E2EEClient:
                 msg_prefix = f"**{sender}** says:  \n"
 
             room_obj = self.client.rooms.get(room)
-            is_encrypted = getattr(room_obj, "encrypted", True)
+            is_encrypted = bool(room_obj and getattr(room_obj, "encrypted", False))
             size = len(file_bytes)
 
             if not mimetype:
@@ -310,8 +310,6 @@ class E2EEClient:
                 if isinstance(upload_resp, UploadError):
                     logging.error(f"Image upload failed: {upload_resp}")
                     return
-
-                mxc = upload_resp.content_uri
 
                 mxc = upload_resp.content_uri
                
@@ -380,4 +378,5 @@ class E2EEClient:
         await self.client.joined_rooms()
 
         logging.info('The Matrix client is waiting for events.')
-        await self.client.sync_forever(timeout=300000, full_state=True)
+        await self.client.sync(timeout=30000, full_state=True)
+        await self.client.sync_forever(timeout=55000, full_state=False)
