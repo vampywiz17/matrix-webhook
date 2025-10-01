@@ -1,4 +1,4 @@
-FROM python:3.9-slim AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 ARG TARGETARCH
@@ -19,7 +19,7 @@ COPY requirements.txt ./
 RUN pip wheel --prefer-binary --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
 
-FROM python:3.9-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
