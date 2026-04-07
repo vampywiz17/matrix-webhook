@@ -93,14 +93,19 @@ class WebhookServer:
             mimetype = getattr(file_field, 'content_type', 'application/octet-stream')
             caption = form.get('caption') or None
 
-            await self.matrix_client.send_image(
-                file_bytes=file_bytes,
-                filename=filename,
-                mimetype=mimetype,
-                room=self.KNOWN_TOKENS[token]['room'],
-                sender=self.KNOWN_TOKENS[token]['app_name'],
-                caption=caption,
-            )
+            try:
+                await self.matrix_client.send_image(
+                    file_bytes=file_bytes,
+                    filename=filename,
+                    mimetype=mimetype,
+                    room=self.KNOWN_TOKENS[token]['room'],
+                    sender=self.KNOWN_TOKENS[token]['app_name'],
+                    caption=caption,
+                )
+            except Exception as e:
+                logging.error(f"Failed to send image webhook message: {e}")
+                return web.json_response({'error': str(e)}, status=500)
+
             return web.json_response({'success': True, 'sent_as': 'image', 'filename': filename})
 
         payload = await request.read()
