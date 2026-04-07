@@ -363,6 +363,7 @@ class E2EEClient:
             )
         except Exception as e:
             logging.error(f"Failed to send image: {e}")
+            raise
 
     async def run(self) -> None:
         await self.login()
