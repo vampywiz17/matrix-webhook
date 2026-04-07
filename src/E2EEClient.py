@@ -230,7 +230,7 @@ class E2EEClient:
             room_id=room,
             message_type="m.room.message",
             content=content,
-            ignore_unverified_devices=True
+            ignore_unverified_devices=False
         )
 
     # 🔹 ÚJ: kép küldése titkosított/nem titkosított szobába
@@ -359,7 +359,7 @@ class E2EEClient:
                 room_id=room,
                 message_type="m.room.message",
                 content=content,
-                ignore_unverified_devices=True
+                ignore_unverified_devices=False
             )
         except Exception as e:
             logging.error(f"Failed to send image: {e}")
