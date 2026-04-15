@@ -17,8 +17,8 @@ from nio import (AsyncClient,
                  KeyVerificationStart,
                  ToDeviceError,
                  LocalProtocolError,
-                 UnknownToDeviceEvent,
-                 KeyVerificationEvent)
+                 UnknownToDeviceEvent)
+
 from termcolor import colored
 import traceback
 
@@ -120,8 +120,7 @@ class E2EEClient:
 
     async def to_device_callback(self, event):  # noqa
         """Handle events sent to device."""
-        logging.info("to_device event received: %s", type(event).__name__)
-        logging.info("to_device raw: %s", getattr(event, "source", None))
+        print(event)
         try:
             client = self.client
 
@@ -371,7 +370,7 @@ class E2EEClient:
         await self.login()
         self.client.add_event_callback(self._message_callback, RoomMessageText)
         self.client.add_response_callback(self._sync_callback, SyncResponse)
-        self.client.add_to_device_callback(self.to_device_callback, (KeyVerificationEvent, UnknownToDeviceEvent))
+        self.client.add_to_device_callback(self.to_device_callback, None)
 
         if self.client.should_upload_keys:
             await self.client.keys_upload()
