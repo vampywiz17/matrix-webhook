@@ -4,6 +4,7 @@ WORKDIR /app
 ARG TARGETARCH
 
 RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
  && if [ "$TARGETARCH" = "arm" ]; then \
       apt-get install -y --no-install-recommends \
         build-essential libffi-dev libssl-dev python3-dev gcc \
