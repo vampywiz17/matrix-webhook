@@ -131,7 +131,7 @@ class E2EEClient:
                     content = {
                         "transaction_id": event.source['content']['transaction_id'],
                         "from_device": client.device_id,
-                        "methods": event.source['content']['methods'],
+                        "methods": ["m.sas.v1"],
                     }
                     message = ToDeviceMessage(
                         "m.key.verification.ready",
@@ -165,6 +165,14 @@ class E2EEClient:
                 resp = await client.accept_key_verification(event.transaction_id)
                 if isinstance(resp, ToDeviceError):
                     print(f"accept_key_verification failed with {resp}")
+                    return
+
+                sas = client.key_verifications[event.transaction_id]
+                todevice_msg = sas.share_key()
+                resp = await client.to_device(todevice_msg)
+                if isinstance(resp, ToDeviceError):
+                    print(f"to_device share_key failed with {resp}")
+                    return
 
             elif isinstance(event, KeyVerificationCancel):
                 print(
