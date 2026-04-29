@@ -18,7 +18,8 @@ from nio import (AsyncClient,
                  ToDeviceError,
                  LocalProtocolError,
                  UnknownToDeviceEvent,
-                 KeyVerificationEvent)
+                 KeyVerificationEvent,
+                 UnknownEvent)
 from termcolor import colored
 import traceback
 
@@ -257,6 +258,63 @@ class E2EEClient:
         except BaseException:
             print(traceback.format_exc())
 
+    async def _unknown_room_event_callback(self, room: MatrixRoom, event: UnknownEvent) -> None:
+        """Handle unknown room events, including room-based verification requests."""
+        try:
+            event_type = getattr(event, "type", None) or event.source.get("type")
+            logging.info("room unknown event received: room=%s type=%s raw=%s", room.room_id, event_type, event.source)
+
+            if event_type != "m.key.verification.request":
+                return
+
+            client = self.client
+            content = event.source.get("content", {})
+            sender = event.source.get("sender") or getattr(event, "sender", None)
+            from_device = content.get("from_device")
+            transaction_id = content.get("transaction_id") or getattr(event, "event_id", None)
+
+            if not sender or not from_device:
+                logging.warning("Room verification request is missing sender/from_device: %s", event.source)
+                return
+
+            logging.info("Received room-based verification request from %s/%s in %s; sending ready.", sender, from_device, room.room_id)
+
+            ready_content = {
+                "from_device": client.device_id,
+                "methods": ["m.sas.v1"],
+                "m.relates_to": {
+                    "rel_type": "m.reference",
+                    "event_id": event.event_id,
+                },
+            }
+            if transaction_id:
+                ready_content["transaction_id"] = transaction_id
+
+            await client.room_send(
+                room_id=room.room_id,
+                message_type="m.key.verification.ready",
+                content=ready_content,
+                ignore_unverified_devices=True,
+            )
+
+            if transaction_id:
+                to_device_content = {
+                    "transaction_id": transaction_id,
+                    "from_device": client.device_id,
+                    "methods": ["m.sas.v1"],
+                }
+                message = ToDeviceMessage(
+                    "m.key.verification.ready",
+                    sender,
+                    from_device,
+                    to_device_content,
+                )
+                self.verification_from_device = from_device
+                await client.to_device(message, transaction_id)
+
+        except BaseException:
+            logging.error("Error while handling unknown room event:\n%s", traceback.format_exc())
+
     async def _sync_callback(self, response: SyncResponse) -> None:
         logging.info(f"We synced, token: {response.next_batch}")
 
@@ -431,6 +489,7 @@ class E2EEClient:
     async def run(self) -> None:
         await self.login()
         self.client.add_event_callback(self._message_callback, RoomMessageText)
+        self.client.add_event_callback(self._unknown_room_event_callback, UnknownEvent)
         self.client.add_response_callback(self._sync_callback, SyncResponse)
         self.client.add_to_device_callback(self.to_device_callback, (KeyVerificationEvent, UnknownToDeviceEvent))
 
