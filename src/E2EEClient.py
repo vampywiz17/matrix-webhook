@@ -4,16 +4,16 @@ import os
 import sys
 from typing import Optional
 from markdown import markdown
-from nio import (AsyncClient,
-                 AsyncClientConfig,
-                 LoginResponse,
+from nio import (AsyncClient, 
+                 AsyncClientConfig, 
+                 LoginResponse, 
                  MatrixRoom,
-                 RoomMessageText,
-                 SyncResponse,
-                 KeyVerificationCancel,
-                 KeyVerificationKey,
-                 KeyVerificationMac,
-                 ToDeviceMessage,
+                 RoomMessageText, 
+                 SyncResponse, 
+                 KeyVerificationCancel, 
+                 KeyVerificationKey, 
+                 KeyVerificationMac, 
+                 ToDeviceMessage, 
                  KeyVerificationStart,
                  ToDeviceError,
                  LocalProtocolError,
@@ -22,14 +22,62 @@ from nio import (AsyncClient,
 from termcolor import colored
 import traceback
 
-try:
-    from nio import KeyVerificationRequest
-except ImportError:
-    KeyVerificationRequest = None
+
+def patch_mindroom_nio_verification_events() -> None:
+    """Runtime compatibility patch for mindroom-nio/vodozemac verification events."""
+    try:
+        from nio.crypto.olm_machine import Olm
+        from nio.events.to_device import (
+            EncryptedToDeviceEvent,
+            KeyVerificationEvent,
+            ToDeviceEvent,
+        )
+    except Exception as exc:
+        logging.warning("Could not apply mindroom-nio verification patch: %s", exc)
+        return
+
+    if getattr(Olm, "_matrix_webhook_verification_patch", False):
+        return
+
+    original_handle_olm_event = Olm._handle_olm_event
+    original_handle_to_device_event = Olm.handle_to_device_event
+
+    def patched_handle_olm_event(self, sender, sender_key, payload):
+        event_type = payload.get("type")
+
+        if event_type and event_type.startswith("m.key.verification."):
+            event_dict = {
+                "sender": sender,
+                "type": event_type,
+                "content": payload.get("content", {}),
+            }
+            parsed_event = ToDeviceEvent.parse_event(event_dict)
+            if parsed_event is None:
+                logging.warning("Could not parse decrypted verification event: %s", event_dict)
+            return parsed_event
+
+        return original_handle_olm_event(self, sender, sender_key, payload)
+
+    def patched_handle_to_device_event(self, event):
+        if isinstance(event, EncryptedToDeviceEvent):
+            decrypted_event = self.decrypt_event(event)
+
+            if isinstance(decrypted_event, KeyVerificationEvent):
+                self.handle_key_verification(decrypted_event)
+
+            return decrypted_event
+
+        return original_handle_to_device_event(self, event)
+
+    Olm._handle_olm_event = patched_handle_olm_event
+    Olm.handle_to_device_event = patched_handle_to_device_event
+    Olm._matrix_webhook_verification_patch = True
+    logging.info("Applied mindroom-nio verification compatibility patch.")
 
 
 class E2EEClient:
     def __init__(self, join_rooms: set):
+        patch_mindroom_nio_verification_events()
         self.STORE_PATH = os.environ['LOGIN_STORE_PATH']
         self.CONFIG_FILE = f"{self.STORE_PATH}/credentials.json"
         self.verification_from_device = ''
@@ -130,48 +178,23 @@ class E2EEClient:
         try:
             client = self.client
 
-            is_verification_request = (
-                (KeyVerificationRequest is not None and isinstance(event, KeyVerificationRequest))
-                or getattr(event, "source", {}).get("type") == "m.key.verification.request"
-            )
-
-            if is_verification_request:
-                logging.info('Received verification request, sending ready.')
-
-                source = getattr(event, "source", {}) or {}
-                content_source = source.get("content", {}) or {}
-
-                transaction_id = getattr(event, "transaction_id", None) or content_source.get("transaction_id")
-                sender = getattr(event, "sender", None) or source.get("sender")
-                from_device = getattr(event, "from_device", None) or content_source.get("from_device")
-
-                if not transaction_id or not sender or not from_device:
-                    logging.error(
-                        "Invalid verification request: transaction_id=%s sender=%s from_device=%s source=%s",
-                        transaction_id,
-                        sender,
-                        from_device,
-                        source,
+            if isinstance(event, UnknownToDeviceEvent):
+                if event.source['type'] == 'm.key.verification.request':
+                    print('Received verification request, sending response.')
+                    content = {
+                        "transaction_id": event.source['content']['transaction_id'],
+                        "from_device": client.device_id,
+                        "methods": ["m.sas.v1"],
+                    }
+                    message = ToDeviceMessage(
+                        "m.key.verification.ready",
+                        event.source['sender'],
+                        event.source['content']['from_device'],
+                        content,
                     )
-                    return
+                    self.verification_from_device = event.source['content']['from_device']
+                    await client.to_device(message, event.source['content']['transaction_id'])
 
-                content = {
-                    "transaction_id": transaction_id,
-                    "from_device": client.device_id,
-                    "methods": ["m.sas.v1"],
-                }
-                message = ToDeviceMessage(
-                    "m.key.verification.ready",
-                    sender,
-                    from_device,
-                    content,
-                )
-                self.verification_from_device = from_device
-                resp = await client.to_device(message, transaction_id)
-                if isinstance(resp, ToDeviceError):
-                    logging.error("verification ready to_device failed with %s", resp)
-
-            elif isinstance(event, UnknownToDeviceEvent):
                 if event.source['type'] == 'm.key.verification.done':
                     print('Received verification done, sending response....')
                     content = {
@@ -352,7 +375,7 @@ class E2EEClient:
                     return
 
                 mxc = upload_resp.content_uri
-
+               
                 content = {
                     "msgtype": "m.image",
                     "body": body_name,
@@ -409,10 +432,7 @@ class E2EEClient:
         await self.login()
         self.client.add_event_callback(self._message_callback, RoomMessageText)
         self.client.add_response_callback(self._sync_callback, SyncResponse)
-        to_device_event_types = [KeyVerificationEvent, UnknownToDeviceEvent]
-        if KeyVerificationRequest is not None:
-            to_device_event_types.append(KeyVerificationRequest)
-        self.client.add_to_device_callback(self.to_device_callback, tuple(to_device_event_types))
+        self.client.add_to_device_callback(self.to_device_callback, (KeyVerificationEvent, UnknownToDeviceEvent))
 
         if self.client.should_upload_keys:
             await self.client.keys_upload()
